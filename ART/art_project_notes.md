@@ -2,7 +2,10 @@
 
 ## 1. 项目定位与核心概念
 
-ART (Agent Reinforcement Trainer) 是由 OpenPipe 开发的一个开源强化学习框架。其核心目标是提供一个符合人体工程学的（ergonomic）、易于集成的工具，使基于大语言模型（LLM）的智能体（Agent）能够通过**经验学习（Learn from experience）**来提升性能和可靠性。
+ART (Agent Reinforcement Trainer) 是由 **OpenPipe** 组织主导开发的一个开源强化学习框架。OpenPipe 是一家成立于 2023 年（YC W23）的 AI 基础设施初创公司，专注于为企业提供微调（Fine-tuning）和部署垂直领域专属 LLM 的平台，致力于让开发者能以极低的成本，用小模型取代昂贵的通用大模型。2025年9月，算力云巨头 CoreWeave 宣布收购了 OpenPipe 以增强其 AI Agent 的强化学习训练能力。
+* **GitHub 项目地址**: [https://github.com/OpenPipe/ART](https://github.com/OpenPipe/ART)
+
+其核心目标是提供一个符合人体工程学的（ergonomic）、易于集成的工具，使基于大语言模型（LLM）的智能体（Agent）能够通过**经验学习（Learn from experience）**来提升性能和可靠性。
 
 ### 1.1 什么是“经验学习”？
 在 ART 中，“经验学习”指的是智能体在实际执行任务的过程中自我进化的能力。具体流程如下：
