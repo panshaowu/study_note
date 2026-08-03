@@ -277,3 +277,28 @@ $logP(t_{z})-(logP(t_{x})+logP(t_{y}))=log(\frac {P(t_{z})}{P(t_{x})P(t_{y})}) \
 2.  **极长上下文与前缀缓存（Prefix Caching）失效：** Kimi K3（1M 上下文）等模型极度依赖 KV Cache 的前缀复用和上下文并行（KCP）。若分词存在随机性，每次切出的 Token 序列不同，前缀缓存将彻底失效。
 3.  **单 Epoch 范式无需防过拟合：** 现代大模型预训练数据极具多样性，模型对海量数据基本只过一遍（Single-pass），几乎不存在早期机器翻译模型中固定切分导致的过拟合风险。
 4.  **排除强化学习的训推不一致：** 在 RLHF 阶段，四个模型（Actor, Critic, Reward, Reference）必须严密对齐。采用绝对确定性的分词，可以从根本上杜绝“因分词随机性导致训推分布偏移”的隐患。目前的“训推不一致”痛点更多集中在 Chat Template 拼接、思维链长度截断与暴露偏差上，而非算法切词的随机性。
+
+### 7.4 重分词漂移（Retokenization Drift）与 Agentic RL 的 TITO 原则
+
+虽然对于同一段给定的文本，`Encode(Text)` 在确定性 BPE 算法下是绝对固定的，但是在强化学习（RLHF / Agentic RL）的交互链路中，依然存在一种由于“解码再编码”引起的 Token 序列变化现象——**重分词漂移（Retokenization Drift）**。
+
+#### 1. 现象与成因：为什么“解码再编码”会发生漂移？
+
+重分词漂移指的是：模型采样生成的 Token 序列，在经历“解码为文本再重新编码”后，得到的 Token ID 序列与原始序列不一致的现象：
+
+$$\text{Tokens}_1 \xrightarrow{\text{Decode}} \text{Text} \xrightarrow{\text{Encode}} \text{Tokens}_2 \quad (\text{其中 } \text{Tokens}_1 \neq \text{Tokens}_2)$$
+
+*   **原因分析**：分词器的 **Decode（解码）过程是一个“多对一（Many-to-One）”的映射**。在自回归生成时，模型由于采样可能输出了非标准或细碎片化的子词路径（例如将 `unhappiness` 切分成 11 个单字符 Token）。当将其解码还原为自然语言文本 `"unhappiness"` 时，原始的切分边界信息彻底丢失；而当系统再次对文本执行 `Encode("unhappiness")` 时，BPE 会重新按照贪心优先级将其合并为最优子词 `["un", "happi", "ness"]`。
+
+#### 2. 对强化学习（RL）训练的危害
+
+在 PPO / GRPO 等 Agentic RL 训练中，训练器（Trainer）需要根据模型生成的每个 Token 精确计算策略梯度（Policy Gradient）与 Log-Probability $\log \pi_\theta(a_t|s_t)$。
+如果 Rollout 阶段将生成的 $\text{Tokens}_1$ 解码成文本传入环境，环境或 Trainer 再重新编码为 $\text{Tokens}_2$，会导致：
+*   **序列长度与位置对齐错位**：导致 Log-Probability 和 Advantage 无法按 Token 位置准确映射。
+*   **梯度更新失效**：策略梯度计算错乱，引发训练 Loss 剧烈抖动甚至训练崩溃。
+
+#### 3. 解决方案：TITO 原则（Token-In, Token-Out）
+
+为了彻底消除重分词漂移，现代大模型强化学习与智能体框架（如 vLLM, SGLang, Agent-R1, DeepSpeed-Chat 等）在系统架构上普遍采用了 **TITO 原则**：
+*   **全程 Token 化交互**：在 Rollout 采样、智能体沙箱环境（Agent Environment）与训练器（Trainer）之间，**全程直接传输和处理原始 Token ID 数组**。
+*   **杜绝中途转码**：严格禁止在通信中间插入“`Decode` 到文本 $\rightarrow$ 重新 `Encode`”的操作，确保训练时更新的动作序列与模型推断时生成的动作序列 **100% 精确对齐**。
